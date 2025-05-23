@@ -6,3 +6,16 @@ sentence-transformers
 huggingface_hub
 python-dotenv
 numpy
+
+langchain
+langchain_community
+langgraph
+langserve[all]
+langchain-ollama
+python-dotenv
+langchain_google_genai
+pandas
+sentence-transformers
+pypdf
+huggingface_hub
+langchain-huggingface

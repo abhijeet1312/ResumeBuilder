@@ -65,43 +65,6 @@ def match_resume(resume, job_desc,prompt_template):
     print(f"Received resume: ")  # Log the received resume
 
    
-#     prompt_template = f"""
-# You are a recruiter evaluating a candidate's resume against a job description.
-
-# Job Description: {job_desc}
-
-# Candidate Resume: {resume}
-
-# Please assess both the technical skills (programming languages, tools, frameworks, relevant experience) and soft skills (design thinking, communication, adaptability, eagerness to learn, empathy, employee engagement). Take into account their education, certifications, and project experience.
-
-# Provide a match score from 0 to 100 based on how well the candidate fits the role, giving realistic weight to key technical requirements and some consideration to soft skills and learning potential.
-
-# First, return both the match score and a brief review.
-
-# Then, extract the following fields from the resume and include them as key-value pairs directly in the same root-level object (do not nest them under any sub-object):
-
-# - match_score
-# - review
-# - name
-# - location
-# - gender (male or female)
-# - mobile
-# - email
-# - education (only the last university attended, the degree obtained, and the year of graduation — only the year, not the month)
-# - last_company_worked_in
-# - years_of_job_experience_after_graduation_in_months
-# - current role of the candidate
-
-# Note:
-# - Use "years_of_job_experience_after_graduation_in_months" as the total number of full months worked after graduation.
-# - If the candidate's graduation was in September 2024 and their first job started in January 2025, and the current month is April 2025, then the correct experience duration is 4 months.
-
-# ⚠️ Strictly return a flat JSON object with no nested keys.
-# ⚠️ Strictly give the current role of the candidate from the last experience in the JSON response.
-
-
-# ✅ Only return a valid JSON response. Do not include any explanations, formatting, or text outside of the JSON.
-# """
 
   
 
@@ -151,3 +114,44 @@ async def match(request: MatchRequest):
         # Handle any errors during the process and return appropriate error message
         print(f"Error in /match/ endpoint: {e}")  # Log error for debugging
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+    
+#     prompt_template = f"""
+# You are a recruiter evaluating a candidate's resume against a job description.
+
+# Job Description: {job_desc}
+
+# Candidate Resume: {resume}
+
+# Please assess both the technical skills (programming languages, tools, frameworks, relevant experience) and soft skills (design thinking, communication, adaptability, eagerness to learn, empathy, employee engagement). Take into account their education, certifications, and project experience.
+
+# Provide a match score from 0 to 100 based on how well the candidate fits the role, giving realistic weight to key technical requirements and some consideration to soft skills and learning potential.
+
+# First, return both the match score and a brief review.
+
+# Then, extract the following fields from the resume and include them as key-value pairs directly in the same root-level object (do not nest them under any sub-object):
+
+# - match_score
+# - review
+# - name
+# - location
+# - gender (male or female)
+# - mobile
+# - email
+# - education (only the last university attended, the degree obtained, and the year of graduation — only the year, not the month)
+# - last_company_worked_in
+# - years_of_job_experience_after_graduation_in_months
+# - current role of the candidate
+
+# Note:
+# - Use "years_of_job_experience_after_graduation_in_months" as the total number of full months worked after graduation.
+# - If the candidate's graduation was in September 2024 and their first job started in January 2025, and the current month is April 2025, then the correct experience duration is 4 months.
+
+# ⚠️ Strictly return a flat JSON object with no nested keys.
+# ⚠️ Strictly give the current role of the candidate from the last experience in the JSON response.
+
+
+# ✅ Only return a valid JSON response. Do not include any explanations, formatting, or text outside of the JSON.
+# """
+    
