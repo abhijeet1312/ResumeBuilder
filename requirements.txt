@@ -19,3 +19,5 @@ sentence-transformers
 pypdf
 huggingface_hub
 langchain-huggingface
+whisper
+langchain-ollama

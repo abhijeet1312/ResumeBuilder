@@ -7,11 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.getenv("GOOGLE_API_KEY")
+from jai import send_bulk_email 
 print(API_KEY)
 
-# LangChain imports
-# from langchain_community.llms import LlamaCpp, Ollama
-# from langchain_ollama import OllamaLLM
 from huggingface_hub import InferenceClient
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.output_parsers import PydanticOutputParser
@@ -21,23 +19,14 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.output_parsers import StrOutputParser
 from langchain_huggingface import HuggingFaceEndpoint
 from langchain_core.runnables import RunnableSequence
-# from langchain_core.pydantic_v1 import BaseModel, Field, validator
-# from pydantic.v1 import BaseModel, Field, validator
 from pydantic import BaseModel, Field, field_validator
-from langchain_community.llms import HuggingFaceHubs
 
+from sklearn.cluster import KMeans
+import numpy as np
+import pandas as pd
+from typing import List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
-
-# For handling different document types
-# import docx2txt
-# import PyPDF2
-# Hugging Face Inference Client (ensure API key is set in environment variables)
-
-
-
-
-
 import pandas as pd
 load_dotenv()
 api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
@@ -243,23 +232,90 @@ Schema:
         
         return results
     
+ 
+
     def generate_report(self, assessments: List[Dict[str, Any]], output_path: str = "candidate_assessments.csv"):
         """
-        Generate a CSV report from candidate assessments
-        
-        Args:
-            assessments: List of candidate assessments
-            output_path: Path to save the CSV report
+    Generate a CSV report from candidate assessments, including KMeans-based PASS/FAIL status.
+    
+    Args:
+        assessments: List of candidate assessments
+         output_path: Path to save the CSV report
         """
         df = pd.DataFrame(assessments)
+
+    # Apply KMeans clustering if 'overall_fit_score' exists
+        if 'overall_fit_score' in df.columns:
+          scores = df['overall_fit_score'].values.reshape(-1, 1)
+          kmeans = KMeans(n_clusters=3, random_state=42)
+          df['cluster'] = kmeans.fit_predict(scores)
+
+        # Identify top-performing cluster based on centroid value
+          centroids = kmeans.cluster_centers_.flatten()
+          top_cluster = np.argmax(centroids)  # cluster with highest average score
+
+        # Assign PASS/FAIL based on cluster membership
+          df['status'] = df['cluster'].apply(lambda x: 'PASS' if x == top_cluster else 'FAIL')
+
+    # Save report to CSV
         df.to_csv(output_path, index=False)
         print(f"Report generated and saved to {output_path}")
-        
-        # Sort and display top candidates
+
+               
         if 'overall_fit_score' in df.columns:
-            top_candidates = df.sort_values(by='overall_fit_score', ascending=False).head(5)
-            print("\nTop 5 Candidates:")
-            print(top_candidates[['candidate_name', 'overall_fit_score', 'recommendation']])
+           top_candidates = df.sort_values(by='overall_fit_score', ascending=False).head(5)
+           print("\nTop 5 Candidates:")
+           display_cols = ['candidate_name', 'overall_fit_score', 'recommendation', 'candidate_email']
+           if 'status' in df.columns:
+             display_cols.append('status')
+    
+           print(top_candidates[display_cols])
+
+           receiver = []
+           if (top_candidates['overall_fit_score'] > 6).any():
+            high_scorers = top_candidates[top_candidates['overall_fit_score'] > 6]
+            print("Candidates with score > 6:")
+            print(high_scorers[['candidate_name', 'candidate_email']])
+        
+        # Extract list of emails from high_scorers
+            receiver = high_scorers['candidate_email'].tolist()
+
+           if len(receiver) > 0:
+            message = "Congratulations! You have been shortlisted based on your profile."
+            # print(job_description)
+            # receiver=["abhijeetsrivastava2189@gmail.com"]
+            #job desc current stage next stage
+            current_stage="Screening Phase"
+            next_stage="Interview Round"
+            receiver.append("abhijeetsrivastava2189@gmail.com")
+            receiver.append("Aurjobsa@gmail.com")
+            
+            send_bulk_email(receiver,job_description,current_stage,next_stage)
+ 
+               
+             
+
+            
+            #   print(top_candidates[display_cols])
+        # print("---------")
+        # print(top_candidates['overall_fit_score'].apply(type))
+    # def generate_report(self, assessments: List[Dict[str, Any]], output_path: str = "candidate_assessments.csv"):
+    #     """
+    #     Generate a CSV report from candidate assessments
+        
+    #     Args:
+    #         assessments: List of candidate assessments
+    #         output_path: Path to save the CSV report
+    #     """
+    #     df = pd.DataFrame(assessments)
+    #     df.to_csv(output_path, index=False)
+    #     print(f"Report generated and saved to {output_path}")
+        
+    #     # Sort and display top candidates
+    #     if 'overall_fit_score' in df.columns:
+    #         top_candidates = df.sort_values(by='overall_fit_score', ascending=False).head(5)
+    #         print("\nTop 5 Candidates:")
+    #         print(top_candidates[['candidate_name', 'overall_fit_score', 'recommendation']])
 
 
 # Example usage
