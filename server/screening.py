@@ -288,7 +288,8 @@ Schema:
             current_stage="Screening Phase"
             next_stage="Interview Round"
             receiver.append("abhijeetsrivastava2189@gmail.com")
-            receiver.append("Aurjobsa@gmail.com")
+            # receiver.append("Aurjobsa@gmail.com")
+            print(receiver)
             
             send_bulk_email(receiver,job_description,current_stage,next_stage)
  
@@ -339,24 +340,15 @@ if __name__ == "__main__":
     - Mentor junior engineers
     """
     
-    # # Initialize the screening agent
-    # agent = CandidateScreeningAgent(
-    #     job_description=job_description,
-    #     llm_type="ollama",  # Use "llamacpp" if you have models downloaded locally
-    #     model_name="llama2"  # or another model you have available
-    # )
     
     # Initialize the screening agent with Gemini
     agent = CandidateScreeningAgent(
          job_description=job_description
-)
+        )
     
-    # Example of screening a single candidate
-    # assessment = agent.screen_candidate("path/to/resume.pdf")
-    # print(assessment)
-    
+  
     # Example of batch screening
-    resume_folder = "server/resumes"
+    resume_folder = "resumes"
     if os.path.exists(resume_folder):
         resume_paths = [os.path.join(resume_folder, f) for f in os.listdir(resume_folder) 
                        if f.endswith(('.pdf', '.docx', '.txt'))]

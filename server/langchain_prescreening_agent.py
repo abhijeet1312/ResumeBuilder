@@ -1,19 +1,20 @@
 # ai_agent.py
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
 from langchain.prompts import StringPromptTemplate
-# from langchain.llms import Ollama  # Free local LLM
-# from langchain_community.llms import Ollama
-# from langchain.llms import Ollama
-# from langchain_ollama import OllamaLLM
+#
 from langchain_community.chat_models import ChatOllama
+import traceback
 from langchain.chains import LLMChain
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 import warnings
+from requests.auth import HTTPBasicAuth
 warnings.filterwarnings("ignore")
+import os
+from twilio.rest import Client
 
-#celery 
+#celery c
 #candidate response time kam hona chahiye particular response time
 #limit the response for questions
 from langchain.schema import AgentAction, AgentFinish
@@ -26,9 +27,6 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 import os
-print(os.getenv("GOOGLE_API_KEY"))
-print(os.getenv("EXOTEL_API_KEY"))
-print(os.getenv("EXOTEL_API_TOKEN"))
 class PreScreeningAgent:
     def __init__(self):
         # Initialize free tools
@@ -113,9 +111,10 @@ class PreScreeningAgent:
         )
     
     def generate_screening_questions(self, job_description: str) -> List[str]:
+        
         """Generate job-specific screening questions using free local LLM"""
         prompt = f"""
-        Generate exactly 3 specific screening questions for this job:
+        Generate exactly 2 specific screening questions for this job:
         
         Job Description: {job_description}
         
@@ -136,124 +135,176 @@ class PreScreeningAgent:
         return questions[:3]  # Ensure exactly 3 questions
     
     
-    # def trigger_exotel_call(self, candidate: Dict, questions: List[str]) -> Dict:
-        """Trigger Exotel call with dynamic IVR"""
-        # Store questions in temporary storage for IVR access
-        question_data = {
-            "candidate_id": candidate["id"],
-            "questions": questions,
-            "timestamp": time.time()
-        }
-        
-        # Save to file/database for IVR webhook access
-        with open(f"temp_questions_{candidate['id']}.json", 'w') as f:
-            json.dump(question_data, f)
-        
-        call_payload = {
-            "From":"8887596182",
-            "To": "9721558140",
-            "CallerId": "80-458-83404",
-            # "Url": f"{os.getenv('WEBHOOK_BASE_URL')}/ivr/{candidate['id']}",
-            "Priority": "high",
-            "TimeLimit": "600",  # 10 minutes
-            "TimeOut": "30"
-        }
-        
-        auth = (os.getenv("EXOTEL_SID"), os.getenv("EXOTEL_TOKEN"))
-        response = requests.post(
-            f"https://288d3c094bfce1a16e0c28caceec158e2d03d61bf4990093:e0406e45315a7509292f2889baed3fb119146e74ec94808capi.exotel.com/v1/Accounts/aurjobs1/Calls/connect'",
-            # f"https://api.exotel.com/v1/Accounts/{os.getenv('EXOTEL_SID')}/Calls/connect",
-            auth=auth,
-            data=call_payload
-        ) 
-        
-        return response.json()
-    
-    # 
-    def trigger_exotel_call(self, candidate: Dict, questions: List[str]) -> Dict:
-        """Trigger Exotel call with dynamic IVR"""
-    
+   
 
-     # Store questions in temporary storage for IVR access
+
+    def trigger_exotel_call(self, candidate: Dict, questions: List[str]) -> Dict:
+        """Trigger Twilio call with dynamic IVR based on candidate and questions."""
+
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        client = Client(account_sid, auth_token)
+
+        candidate_id = candidate.get("id")
+    # candidate_phone = candidate.get("phone")  # Ensure candidate dict has 'phone'
+        candidate_phone ="+918887596182"  # Ensure candidate dict has 'phone'
+
+        if not candidate_id or not candidate_phone:
+         return {"success": False, "error": "Candidate ID or phone missing"}
+
+    # Save questions to temp file for IVR to read
         question_data = {
-        "candidate_id": candidate["id"],
+        "candidate_id": candidate_id,
         "questions": questions,
         "timestamp": time.time()
          }
-        # print("here are the questions ",questions)
-     # Save to file/database for IVR webhook access
-        with open(f"temp_questions_{candidate['id']}.json", 'w') as f:
+
+        temp_file_path = os.path.join(os.path.dirname(__file__), f"temp_questions_{candidate_id}.json")
+        with open(temp_file_path, 'w') as f:
          json.dump(question_data, f)
 
-     # Prepare call payload
-        call_payload = {
-        "From": "8887596182",
-        # "To": "9721558140",  # Use candidate's phone if available
-        "To":candidate["phone"],
-        "CallerId": "80-458-83404",
-        # "Url": f"{os.getenv('WEBHOOK_BASE_URL')}/ivr/{candidate['id']}",
-        "Priority": "high",
-        "TimeLimit": "600",  # 10 minutes
-        "TimeOut": "30"
-            }
-
-     # API credentials
-        
-        api_key=os.getenv("EXOTEL_API_KEY")
-        api_token=os.getenv("EXOTEL_API_TOKEN")
-        sid = "aurjobs1"
-        # base_url = "https://api.exotel.com/v1"
-        print(candidate["phone"],"-----")
-        API_URL = f"https://api.exotel.com/v1/Accounts/{sid}/Calls/connect.json"
-        
-
         try:
-         response = requests.post(
-            API_URL,
-            auth=(api_key, api_token),
-            data=call_payload
-         )
-        #  print("00000000")
-         print(response)
-         response.raise_for_status()
-         return response.json()
-        except requests.RequestException as e:
-         return {
-            "error": "Failed to initiate call",
-            "details": str(e),
-            "response": response.text if 'response' in locals() else None
-        }
+        # Trigger the outbound call via Twilio
+          call = client.calls.create(
+            from_="+17178825763",  # your verified Twilio number
+            to=candidate_phone,   # dynamic recipient
+            url=f"https://e9b8-2405-201-600e-f151-602e-f6d6-709c-6cb8.ngrok-free.app/voice/{candidate['id']}"  # must match your webhook
+           )
+          print(call)
+          return {"success": True, "call_sid": call.sid}
+        except Exception as e:
+          return {"success": False, "error": str(e)}
+      
+      
+    
 
     def transcribe_audio(self, audio_url: str) -> str:
-        """Transcribe audio using free Whisper"""
-        print("0000000000")
-      
-        try:
-         
-         if not audio_url.startswith("http"):
+      print("inside transcribe audio")
+      temp_file = None
+      try:
+        if not audio_url.startswith("http"):
             raise ValueError(f"Invalid audio URL: {audio_url}")
+
+        audio_response = requests.get(
+            audio_url,
+            auth=HTTPBasicAuth(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+        )
+        print("jai mata di ")
         
-         audio_response = requests.get(audio_url)
-         if audio_response.status_code != 200:
+        if audio_response.status_code != 200:
             raise ValueError(f"Failed to download audio: {audio_response.status_code}")
+
+        # Use absolute path and unique filename
+        import uuid
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        temp_filename = f"temp_audio_{uuid.uuid4().hex[:8]}.mp3"
+        temp_file = os.path.join(script_dir,temp_filename)
         
-         temp_file = f"temp_audio_{int(time.time())}.mp3"
-         with open(temp_file, "wb") as f:
+        print(f"📁 Saving audio to: {temp_file}")
+        
+        with open(temp_file, "wb") as f:
             f.write(audio_response.content)
+            f.flush() #ensure data is written to disk
+            os.fsync(f.fileno()) # force write to disk
         
-         # Transcribe
-         result = self.whisper_model.transcribe(temp_file)
-         print(result)
-         # Cleanup
-         os.remove(temp_file)
+        # Verify file was written
+        if not os.path.exists(temp_file):
+            raise FileNotFoundError(f"Failed to create temporary file: {temp_file}")
+            
+        file_size = os.path.getsize(temp_file)
+        print(f"📊 File size: {file_size} bytes")
         
-         return result["text"].strip()
-        except Exception as e:
-         print(f"Transcription error: {e}")
+        if file_size < 100:  # Reduced minimum size threshold
+            raise ValueError(f"Audio file too small ({file_size} bytes) - likely corrupted or empty")
+
+        time.sleep(5)
+        print(f"🎵 Transcribing: {temp_file}")
+        
+        # Triple-check file exists before transcription with detailed debug info
+        # print(f'Current working directory: {os.getcwd()}')
+        print(f'Script directory: {script_dir}')
+        print(f'Temp file path: {temp_file}')
+        print(f'Temp file absolute path: {os.path.abspath(temp_file)}')
+        print(f'File exists: {os.path.exists(temp_file)}')
+        
+        # Double-check file exists before transcription
+        # print('ospath',os.path)
+        if not os.path.exists(temp_file):
+            print('file not found in os path')
+            raise FileNotFoundError(f"Temporary file disappeared: {temp_file}")
+        
+        # Ensure whisper_model is properly initialized
+        if not hasattr(self, 'whisper_model') or self.whisper_model is None:
+            raise AttributeError("Whisper model not initialized")
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+           
+        abs_temp_file = os.path.abspath(temp_file)
+        print(f"Using absolute path for transcription: {abs_temp_file}")
+        
+        
+        try:
+            print("🎤 Attempting direct audio loading with librosa...")
+            import librosa
+            import numpy as np
+                
+                # Save to temp file first
+            direct_temp_file = os.path.join(os.getcwd(), f"direct_{uuid.uuid4().hex[:6]}.mp3")
+                
+            with open(direct_temp_file, "wb") as f:
+                 f.write(audio_response.content)
+                 f.flush()
+                 os.fsync(f.fileno())
+                
+                # Load audio with librosa
+            audio_data, sr = librosa.load(direct_temp_file, sr=16000)  # Whisper expects 16kHz
+                
+                # Clean up temp file immediately
+            if os.path.exists(direct_temp_file):
+                    os.remove(direct_temp_file)
+                
+                # Pass numpy array directly to Whisper
+            result = self.whisper_model.transcribe(audio_data)
+            print("✅ Direct audio loading successful!")
+                
+        except Exception as direct_audio_error:
+             print(f"❌ Direct audio loading failed: {direct_audio_error}")
+        
+        
+        
+       
+        print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+        
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
+            print(f"🗑️ Cleaned up temporary file: {temp_file}")
+            
+        return result["text"].strip()
+
+      except Exception as e:
+        print(f"Transcription error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        
+        
+        # Additional debugging info
+        if temp_file:
+            print(f"Debug - temp_file variable: {temp_file}")
+            print(f"Debug - temp_file exists: {os.path.exists(temp_file)}")
+            print(f"Debug - temp_file absolute: {os.path.abspath(temp_file)}")
+        
+        # Clean up temp file if it exists
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+                print(f"🗑️ Cleaned up temporary file after error: {temp_file}")
+            except Exception as cleanup_error:
+                print(f"Failed to cleanup temp file: {cleanup_error}")
+        
         return ""
 
+    
     def evaluate_answer(self, question: str, answer: str) -> float:
         """Evaluate answer using free local LLM"""
+        print("inside evaluate answer")
         if not answer.strip():
             return 0.0
         
@@ -273,133 +324,261 @@ class PreScreeningAgent:
         """
         
         response = self.llm.invoke(prompt)
+        print("response of question and answer",response)
+        
+        # Extract the actual content (the string '6', for example)
+        if hasattr(response, "content"):
+          answer_text = response.content
+        else:
+          answer_text = str(response)  # fallback
+        
+        
         
         try:
             # Extract number from response
-            score_str = ''.join(filter(str.isdigit, response.split()[0]))
+            score_str = ''.join(filter(str.isdigit, answer_text.split()[0]))
             score = float(score_str) if score_str else 0.0
             return min(max(score, 0.0), 10.0)  # Clamp between 0-10
         except:
             return 0.0
     
-    def wait_for_responses(self, candidate_id: int, num_questions: int, timeout: int = 30):
-        """Wait for webhook responses with timeout (15 minutes)"""
-        start_time = time.time()
-        responses = []
+ 
+
+   
+    
+    def wait_for_responses(self, candidate_id: int, num_questions: int, timeout: int = 300):
+      """Wait for webhook responses with timeout (5 minutes)"""
+      start_time = time.time()
+      responses = []
+      received = set()
+    
+     # Add current working directory info for debugging
+      current_dir = os.getcwd()
+      print(f"🔍 Looking for files in: {current_dir}")
+      print(f"⏳ Waiting for {num_questions} response files for candidate {candidate_id}...")
+
+      while len(responses) < num_questions and (time.time() - start_time) < timeout:
+        # Show progress every 30 seconds
+        elapsed = time.time() - start_time
+        if int(elapsed) % 30 == 0 and elapsed > 0:
+            print(f"⏰ Still waiting... {elapsed:.0f}s elapsed, {len(responses)}/{num_questions} responses received")
         
-        while len(responses) < num_questions and (time.time() - start_time) < timeout:
-            # Check for response files from webhook
-            for i in range(num_questions):
-                response_file = f"responses_{candidate_id}_q{i+1}.json"
-                if os.path.exists(response_file):
+        # Check for all response files
+        for i in range(1, num_questions + 1):
+            if i in received:
+                continue
+
+            response_file = f"responses_{candidate_id}_q{i}.json"
+            
+            if os.path.exists(response_file):
+                print(f"📥 Found: {response_file}")
+                
+                # Add a small delay to ensure file is fully written
+                time.sleep(0.1)
+                
+                try:
                     with open(response_file, 'r') as f:
                         response_data = json.load(f)
+                    
+                    # Validate the response data
+                    if not response_data.get('audio_url'):
+                        print(f"⚠️ Invalid response data in {response_file}: missing audio_url")
+                        continue
+                    
                     responses.append(response_data)
-                    os.remove(response_file)  # Cleanup
-            
-            time.sleep(2)  # Check every 2 seconds
+                    received.add(i)
+                    
+                    print(f"✅ Processed: {response_file} (Question {i})")
+                    
+                    # Don't delete the file immediately - keep for debugging
+                    # You can uncomment this line later:
+                    # os.remove(response_file)
+                    
+                except Exception as e:
+                    print(f"❌ Error reading {response_file}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+        time.sleep(2)  # Check every 2 seconds
+
+     # Final summary
+      if len(responses) < num_questions:
+        print(f"⚠️ Timeout reached after {timeout}s. Only received {len(responses)} of {num_questions} responses.")
         
-        return responses
+        # List any files that exist but weren't processed
+        all_response_files = [f for f in os.listdir('.') if f.startswith(f'responses_{candidate_id}_')]
+        if all_response_files:
+            print(f"🔍 Found these response files: {all_response_files}")
+      else:
+        print(f"✅ Successfully received all {num_questions} responses for candidate {candidate_id}")
+
+      return responses
+
+
+# Also add this helper method to your PreScreeningAgent class
+    def check_call_status(self, call_sid: str) -> dict:
+       """Check the status of a Twilio call"""
+       try:
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        client = Client(account_sid, auth_token)
+        
+        call = client.calls(call_sid).fetch()
+        return {
+            "status": call.status,
+            "duration": call.duration,
+            "start_time": call.start_time,
+            "end_time": call.end_time
+        }
+       except Exception as e:
+        return {"error": str(e)}
     
     def run_pre_screening(self, input_data: str) -> Dict:
-        """Main pre-screening function"""
-        print("ja ho")
-        try:
-            # Parse input
-            data = json.loads(input_data) if isinstance(input_data, str) else input_data
-            candidates = data.get("candidates", [])
-            # print(candidates)
-            job_description = data.get("job_description", "")
-            # print(job_description)
+      """Main pre-screening function with better error handling"""
+      print("Starting pre-screening process...")
+      try:
+        # Parse input
+        data = json.loads(input_data) if isinstance(input_data, str) else input_data
+        candidates = data.get("candidates", [])
+        job_description = data.get("job_description", "")
+        
+        if not candidates or not job_description:
+            return {"error": "Missing candidates or job description"}
+        
+        # Generate questions
+        print("Generating screening questions...")
+        questions = self.generate_screening_questions(job_description)
+        print(f"Generated {len(questions)} questions: {questions}")
+        
+        results = []
+        
+        for candidate in candidates:
+            candidate_name = candidate.get('name', 'Unknown')
+            candidate_id = candidate.get('id')
             
-            if not candidates or not job_description:
-                return {"error": "Missing candidates or job description"}
+            print(f"\n{'='*50}")
+            print(f"Starting pre-screening for {candidate_name} (ID: {candidate_id})")
+            print(f"{'='*50}")
             
-            # Generate questions
-            print("------------")
-            questions = self.generate_screening_questions(job_description)
-            # print("+++++++++++++")
-            # print(questions)
+            # Trigger call
+            print("🔄 Initiating call...")
+            call_result = self.trigger_exotel_call(candidate, questions)
             
-            results = []
-            
-            for candidate in candidates:
-                print(f"Starting pre-screening for {candidate.get('name', 'Unknown')}")
-                
-                # Trigger call
-                call_result = self.trigger_exotel_call(candidate, questions)
-                
-                if "error" in call_result:
-                    results.append({
-                        "candidate_id": candidate.get("id"),
-                        "name": candidate.get("name"),
-                        "status": "call_failed",
-                        "error": call_result["error"],
-                        "score": 0.0
-                    })
-                    continue
-                
-                # Wait for responses
-                
-                responses = self.wait_for_responses(candidate.get("id"), len(questions))
-                
-                if not responses:
-                    results.append({
-                        "candidate_id": candidate.get("id"),
-                        "name": candidate.get("name"),
-                        "status": "no_response",
-                        "score": 0.0
-                    })
-                    continue
-                
-                # Process responses
-                scores = []
-                transcripts = []
-                
-                for i, response in enumerate(responses):
-                    if i < len(questions):
-                        audio_url = response.get("audio_url", "")
-                        if audio_url:
-                            transcript = self.transcribe_audio(audio_url)
-                            score = self.evaluate_answer(questions[i], transcript)
-                            scores.append(score)
-                            transcripts.append({
-                                "question": questions[i],
-                                "answer": transcript,
-                                "score": score
-                            })
-                
-                avg_score = sum(scores) / len(scores) if scores else 0.0
-                
+            if "error" in call_result:
+                print(f"❌ Call failed: {call_result['error']}")
                 results.append({
-                    "candidate_id": candidate.get("id"),
-                    "name": candidate.get("name"),
-                    "phone": candidate.get("phone"),
-                    "status": "completed",
-                    "overall_score": round(avg_score, 2),
-                    "individual_scores": scores,
-                    "responses": transcripts,
-                    "qualified": avg_score >= 6.0  # Threshold for next round
+                    "candidate_id": candidate_id,
+                    "name": candidate_name,
+                    "status": "call_failed",
+                    "error": call_result["error"],
+                    "score": 0.0
                 })
+                continue
             
-            # Sort by score (highest first)
-            qualified_candidates = sorted(
-                [r for r in results if r.get("qualified", False)],
-                key=lambda x: x.get("overall_score", 0),
-                reverse=True
-            )
+            call_sid = call_result.get("call_sid")
+            print(f"📞 Call initiated successfully. SID: {call_sid}")
             
-            return {
-                "status": "success",
-                "total_candidates": len(candidates),
-                "completed_screenings": len([r for r in results if r["status"] == "completed"]),
-                "qualified_count": len(qualified_candidates),
-                "qualified_candidates": qualified_candidates,
-                "all_results": results
-            }
+            # Wait a bit for call to connect
+            print("⏳ Waiting for call to connect...")
+            time.sleep(10)
             
-        except Exception as e:
-            return {"error": f"Pre-screening  failed: {str(e)}"}
+            # Check call status
+            if call_sid:
+                call_status = self.check_call_status(call_sid)
+                print(f"📊 Call status: {call_status}")
+            
+            # Wait for responses with longer timeout
+            print(f"🎧 Waiting for {len(questions)} responses...")
+            responses = self.wait_for_responses(candidate_id, len(questions), timeout=300)  # 5 minutes
+            
+            if not responses:
+                print(f"❌ No responses received for {candidate_name}")
+                results.append({
+                    "candidate_id": candidate_id,
+                    "name": candidate_name,
+                    "status": "no_response",
+                    "score": 0.0,
+                    "call_sid": call_sid
+                })
+                continue
+            
+            print(f"✅ Received {len(responses)} responses, processing...")
+            
+            # Process responses
+            scores = []
+            transcripts = []
+            
+            for i, response in enumerate(responses):
+                if i < len(questions):
+                    audio_url = response.get("audio_url", "")
+                    if audio_url:
+                        print(f"🎵 Transcribing audio for question {i+1}...")
+                        transcript = self.transcribe_audio(audio_url)
+                        print(f"📝 Transcript: {transcript[:100]}...")
+                        
+                        score = self.evaluate_answer(questions[i], transcript)
+                        print(f"📊 Score for question {i+1}: {score}/10")
+                        
+                        scores.append(score)
+                        transcripts.append({
+                            "question": questions[i],
+                            "answer": transcript,
+                            "score": score
+                        })
+            
+            avg_score = sum(scores) / len(scores) if scores else 0.0
+            qualified = avg_score >= 2.0
+            
+            print(f"🎯 Final Results for {candidate_name}:")
+            print(f"   Average Score: {avg_score:.2f}/10")
+            print(f"   Qualified: {'✅ YES' if qualified else '❌ NO'}")
+            
+            results.append({
+                "candidate_id": candidate_id,
+                "name": candidate_name,
+                "phone": candidate.get("phone"),
+                "status": "completed",
+                "overall_score": round(avg_score, 2),
+                "individual_scores": scores,
+                "responses": transcripts,
+                "qualified": qualified,
+                "call_sid": call_sid
+            })
+        
+        # Sort by score (highest first)
+        qualified_candidates = sorted(
+            [r for r in results if r.get("qualified", False)],
+            key=lambda x: x.get("overall_score", 0),
+            reverse=True
+        )
+        
+        print(f"\n{'='*50}")
+        print("FINAL SCREENING RESULTS")
+        print(f"{'='*50}")
+        print(f"Total Candidates: {len(candidates)}")
+        print(f"Completed Screenings: {len([r for r in results if r['status'] == 'completed'])}")
+        print(f"Qualified Candidates: {len(qualified_candidates)}")
+        
+        return {
+            "status": "success",
+            "total_candidates": len(candidates),
+            "completed_screenings": len([r for r in results if r["status"] == "completed"]),
+            "qualified_count": len(qualified_candidates),
+            "qualified_candidates": qualified_candidates,
+            "all_results": results
+        }
+        
+      except Exception as e:
+        print(f"❌ Pre-screening failed with error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Pre-screening failed: {str(e)}"}
+    
+    
+    
+    
+    
+    
     
     def evaluate_single_candidate(self, input_data: str) -> Dict:
         """Evaluate a single candidate's performance"""
@@ -458,3 +637,7 @@ if __name__ == "__main__":
     
     result = agent.run_pre_screening(json.dumps(test_input))
     print(json.dumps(result, indent=2))
+    
+    
+    
+    
