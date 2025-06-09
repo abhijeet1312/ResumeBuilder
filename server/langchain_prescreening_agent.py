@@ -168,7 +168,7 @@ class PreScreeningAgent:
           call = client.calls.create(
             from_="+17178825763",  # your verified Twilio number
             to=candidate_phone,   # dynamic recipient
-            url=f"https://e9b8-2405-201-600e-f151-602e-f6d6-709c-6cb8.ngrok-free.app/voice/{candidate['id']}"  # must match your webhook
+            url=f"https://ab39-2405-201-600e-f151-537-6f75-9239-3b9f.ngrok-free.app/voice/{candidate['id']}"  # must match your webhook
            )
           print(call)
           return {"success": True, "call_sid": call.sid}
@@ -392,7 +392,7 @@ class PreScreeningAgent:
                     
                     # Don't delete the file immediately - keep for debugging
                     # You can uncomment this line later:
-                    # os.remove(response_file)
+                    os.remove(response_file)
                     
                 except Exception as e:
                     print(f"❌ Error reading {response_file}: {e}")
