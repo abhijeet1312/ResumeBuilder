@@ -9,7 +9,7 @@ load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 from jai import send_bulk_email 
 print(API_KEY)
-
+import json
 from huggingface_hub import InferenceClient
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.output_parsers import PydanticOutputParser
@@ -29,8 +29,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
 import pandas as pd
 load_dotenv()
-api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-print(api_token)
+# api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+# print(api_token)
 
 from getpass import getpass
 
@@ -234,7 +234,7 @@ Schema:
     
  
 
-    def generate_report(self, assessments: List[Dict[str, Any]], output_path: str = "candidate_assessments.csv"):
+    def generate_report(self, assessments: List[Dict[str, Any]], output_path: str = "candidate_assessments.csv",voice_interview_threshold: float = 3.0):
         """
     Generate a CSV report from candidate assessments, including KMeans-based PASS/FAIL status.
     
@@ -247,7 +247,7 @@ Schema:
     # Apply KMeans clustering if 'overall_fit_score' exists
         if 'overall_fit_score' in df.columns:
           scores = df['overall_fit_score'].values.reshape(-1, 1)
-          kmeans = KMeans(n_clusters=3, random_state=42)
+          kmeans = KMeans(n_clusters=1, random_state=42)
           df['cluster'] = kmeans.fit_predict(scores)
 
         # Identify top-performing cluster based on centroid value
@@ -271,95 +271,150 @@ Schema:
     
            print(top_candidates[display_cols])
 
-           receiver = []
-           if (top_candidates['overall_fit_score'] > 6).any():
-            high_scorers = top_candidates[top_candidates['overall_fit_score'] > 6]
+           # Initialize return data
+           qualified_candidates_for_voice = []
+           email_recipients = []
+           if (top_candidates['overall_fit_score'] >= 3.0).any():
+            high_scorers = top_candidates[top_candidates['overall_fit_score'] >=3.0]
             print("Candidates with score > 6:")
-            print(high_scorers[['candidate_name', 'candidate_email']])
+            print(high_scorers[['candidate_name','overall_fit_score' ,'candidate_email']])
         
-        # Extract list of emails from high_scorers
-            receiver = high_scorers['candidate_email'].tolist()
+         # Extract list of emails from high_scorers
+            email_recipients  = high_scorers['candidate_email'].tolist()
+            print(len(email_recipients))
+            # Prepare candidate data for voice interviews
+            for index, row in high_scorers.iterrows():
+                candidate_data = {
+                    "id": index + 1,  # Assign unique ID
+                    "name": row['candidate_name'],
+                    "email": row['candidate_email'],
+                    # "phone": self.extract_phone_number(row.get('candidate_email', '')),  # You'll need to implement this
+                    "phone":"+918887596182",
+                    "resume_score": row['overall_fit_score'],
+                    "recommendation": row.get('recommendation', ''),
+                    "strengths": row.get('strengths', []),
+                    "weaknesses": row.get('weaknesses', []),
+                    "status": row.get('status', 'UNKNOWN')
+                }
+                qualified_candidates_for_voice.append(candidate_data)
 
-           if len(receiver) > 0:
+            
+            
+
+           if len(email_recipients) > 0:
+               
             message = "Congratulations! You have been shortlisted based on your profile."
             # print(job_description)
             # receiver=["abhijeetsrivastava2189@gmail.com"]
             #job desc current stage next stage
-            current_stage="Screening Phase"
-            next_stage="Interview Round"
-            receiver.append("abhijeetsrivastava2189@gmail.com")
+            current_stage="Resume Screening Phase"
+            next_stage="Voice Interview Round"
+            email_recipients.append("abhijeetsrivastava2189@gmail.com")
+            print(f"Sending emails to: {email_recipients}")
             # receiver.append("Aurjobsa@gmail.com")
-            print(receiver)
+            print(email_recipients)
             
-            send_bulk_email(receiver,job_description,current_stage,next_stage)
- 
-               
+            try:
+                    send_bulk_email(email_recipients, self.job_description, current_stage, next_stage)
+                    print("✅ Emails sent successfully")
+            except Exception as e:
+                    print(f"❌ Error sending emails: {e}")
+      # Return structured data for voice interviews
+        return {
+        "qualified_candidates": qualified_candidates_for_voice,
+        "total_qualified": len(qualified_candidates_for_voice),
+        "email_recipients": email_recipients,
+        "threshold_used": voice_interview_threshold
+    }         
              
+    # Function to trigger voice interviews using the returned data
+    def trigger_voice_interviews_for_qualified(self,qualified_data: Dict):
+        """
+        Trigger voice interviews for qualified candidates
+    
+        Args:
+        qualified_data: Data returned from generate_report
+        job_description: Job description for the position
+         """
+        if not qualified_data['qualified_candidates']:
+           print("No qualified candidates for voice interview")
+           return
+        print(f"\n🎤 Starting voice interviews for {qualified_data['total_qualified']} candidates")
+       
+        # Initialize voice interview agent
+        from langchain_prescreening_agent import create_prescreening_agent
+        voice_agent = create_prescreening_agent()
+    
+    # Prepare input for voice interviewer
+        voice_input = {
+        "candidates": qualified_data['qualified_candidates'],
+        "job_description": self.job_description
+         }
+    
+    # Run voice interviews
+        print("📞 Initiating voice interviews...")
+        voice_results = voice_agent.run_pre_screening(json.dumps(voice_input))
+    
+        return voice_results
+           
+          
 
+
+
+
+
+# Modified usage example
+# if __name__ == "__main__":
+#     job_description = """
+#     Senior Software Engineer - AI/ML Team
+    
+#     Requirements:
+#     - 5+ years of experience in software engineering
+#     - Proficiency in Python and experience with machine learning frameworks
+#     - Experience with large language models and natural language processing
+#     - Strong background in data structures and algorithms
+#     - Bachelor's degree in Computer Science or related field
+#     """
+    
+#     # Initialize the screening agent
+#     agent = CandidateScreeningAgent(job_description=job_description)
+    
+#     # Screen resumes
+#     resume_folder = "resumes"
+#     if os.path.exists(resume_folder):
+#         resume_paths = [os.path.join(resume_folder, f) for f in os.listdir(resume_folder) 
+#                        if f.endswith(('.pdf', '.docx', '.txt'))]
+        
+#         print(resume_paths)
+#         assessments = agent.batch_screen_candidates(resume_paths)
+        
+#         # Generate report and get qualified candidates
+#         qualified_data = agent.generate_report(assessments, voice_interview_threshold=3.0)
+        
+#         # Trigger voice interviews for qualified candidates
+#         if qualified_data['qualified_candidates']:
+#             print(f"\n{'='*50}")
+#             print("PROCEEDING TO VOICE INTERVIEWS")
+#             print(f"{'='*50}")
             
-            #   print(top_candidates[display_cols])
-        # print("---------")
-        # print(top_candidates['overall_fit_score'].apply(type))
-    # def generate_report(self, assessments: List[Dict[str, Any]], output_path: str = "candidate_assessments.csv"):
-    #     """
-    #     Generate a CSV report from candidate assessments
-        
-    #     Args:
-    #         assessments: List of candidate assessments
-    #         output_path: Path to save the CSV report
-    #     """
-    #     df = pd.DataFrame(assessments)
-    #     df.to_csv(output_path, index=False)
-    #     print(f"Report generated and saved to {output_path}")
-        
-    #     # Sort and display top candidates
-    #     if 'overall_fit_score' in df.columns:
-    #         top_candidates = df.sort_values(by='overall_fit_score', ascending=False).head(5)
-    #         print("\nTop 5 Candidates:")
-    #         print(top_candidates[['candidate_name', 'overall_fit_score', 'recommendation']])
-
-
-# Example usage
-if __name__ == "__main__":
-    # Example job description
-    job_description = """
-    Senior Software Engineer - AI/ML Team
-    
-    Requirements:
-    - 5+ years of experience in software engineering
-    - Proficiency in Python and experience with machine learning frameworks (TensorFlow, PyTorch)
-    - Experience with large language models and natural language processing
-    - Strong background in data structures and algorithms
-    - Bachelor's degree in Computer Science or related field (Master's preferred)
-    - Excellent communication and teamwork skills
-    
-    Responsibilities:
-    - Develop and maintain AI/ML models and pipelines
-    - Collaborate with cross-functional teams to implement AI features
-    - Optimize models for production environments
-    - Mentor junior engineers
-    """
-    
-    
-    # Initialize the screening agent with Gemini
-    agent = CandidateScreeningAgent(
-         job_description=job_description
-        )
-    
-  
-    # Example of batch screening
-    resume_folder = "resumes"
-    if os.path.exists(resume_folder):
-        resume_paths = [os.path.join(resume_folder, f) for f in os.listdir(resume_folder) 
-                       if f.endswith(('.pdf', '.docx', '.txt'))]
-        
-        assessments = agent.batch_screen_candidates(resume_paths)
-        agent.generate_report(assessments)
-    else:
-        print(f"Resume folder {resume_folder} not found. Please create it and add resumes.")
-
-
-# Utility Function: Add a simple resume parser for extraction of key information
+#             voice_results = agent.trigger_voice_interviews_for_qualified(qualified_data)
+            
+#             if voice_results:
+#                 print("\n📊 Voice Interview Results:")
+#                 print(f"Total candidates interviewed: {voice_results.get('completed_screenings', 0)}")
+#                 print(f"Qualified after voice interview: {voice_results.get('qualified_count', 0)}")
+                
+#                 # Save final results
+#                 with open('final_screening_results.json', 'w') as f:
+#                     json.dump({
+#                         'resume_screening': qualified_data,
+#                         'voice_interviews': voice_results
+#                     }, f, indent=2)
+#                 print("✅ Final results saved to final_screening_results.json")
+#         else:
+#             print("❌ No candidates qualified for voice interviews")
+#     else:
+#         print(f"Resume folder {resume_folder} not found.")
 def extract_key_info_from_resume(resume_text: str) -> Dict[str, Any]:
     """
     Extract key information from a resume
