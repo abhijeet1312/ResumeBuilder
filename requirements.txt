@@ -21,3 +21,8 @@ huggingface_hub
 langchain-huggingface
 whisper
 langchain-ollama
+cloudinary
+boto3==1.34.0
+python-multipart==0.0.6
+pdfplumber
+docx2txt
