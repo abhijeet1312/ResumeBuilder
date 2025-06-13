@@ -104,11 +104,11 @@ def match_resume(resume, job_desc, prompt_template):
         # Try parsing the response as JSON
         try:
             parsed_result=json.loads(result)
-            # return {
-            #     "test":"true",
-            #     "data":parsed_result
-            # }
-            return json.loads(result)
+            return {
+               "test":"true",
+                 "data":parsed_result
+            }
+            # return json.loads(result)
         except json.JSONDecodeError as e:
             print(f"JSON Decode Error: {e}")
             return {"error": "Failed to parse the response as JSON", "raw_response": result}
